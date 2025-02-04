@@ -1,2 +1,8 @@
 Fileserver/venv/
 Fileserver/.env
+AgentRegistry/venv/
+AgentRegistry/.env
+GitService/venv/
+GitService/.env
+AgentService/venv/
+AgentService/.env
