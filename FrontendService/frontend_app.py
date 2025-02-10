@@ -434,9 +434,14 @@ def receive_task_execution():
         # We'll keep it minimal for demonstration.
         # Ensure that 'type' and 'payload' are present, but not strictly enforced here.
         msg = {
+            "message_id": data.get("message_id", str(time.time())),  
+            "sender": data.get("sender", "Unknown"),
+            "receiver": data.get("receiver", "FrontendUI"),
+            "timestamp": data.get("timestamp", time.strftime("%Y-%m-%dT%H:%M:%SZ")),
             "type": data.get("type", "UNKNOWN"),
             "payload": data.get("payload", {}),
-            "timestamp": data.get("timestamp", time.strftime("%Y-%m-%dT%H:%M:%SZ"))
+            "status": data.get("status", "Pending"),  
+            "reason": data.get("reason", "N/A"),  
         }
         task_executions_log.insert(0, msg)  # Insert at front so newest appear first
         return jsonify({"status": "TASK_EXECUTION received"}), 200

@@ -244,6 +244,7 @@ Output valid JSON in the exact format below (no additional keys):
             model="gemini-2.0-flash-thinking-exp-01-21",
             contents=[types.Part.from_text(text=prompt)]
         )
+        logger.info(f"[ManagerAgent] LLM post-task prompt:\n{prompt}\n")
         logger.info(f"[ManagerAgent] LLM post-task response:\n{response.text}\n")
         raw_response = response.text
 
@@ -276,6 +277,9 @@ def create_project_in_fileserver(requirement_text: str) -> dict:
     project_name = f"project_{int(time.time())}"
     file_server_folder = f"uploads/{project_name}"
 
+    # Initialize Git repo
+    init_git_repo(project_name)
+
     # Write requirements.md
     req_path = f"{file_server_folder}/requirements.md"
     write_file_to_server(req_path, requirement_text)
@@ -284,9 +288,6 @@ def create_project_in_fileserver(requirement_text: str) -> dict:
     status_path = f"{file_server_folder}/status.md"
     initial_status = "Project initialized."
     write_file_to_server(status_path, initial_status)
-
-    # Initialize Git repo
-    init_git_repo(project_name)
 
     return {
         "project_name": project_name,
@@ -445,6 +446,7 @@ class ManagerAgent(BaseAgent):
                 forward_task_execution_to_frontend(payload)
 
                 # 2) Attempt to read the project_config from the payload to identify the project paths
+                code_generation_status = payload.get("code_generation_status", "failure")
                 project_config = payload.get("project_config", {})
                 file_server_folder = project_config.get("file_server_folder", "")
                 requirements_md_path = os.path.join(file_server_folder, "requirements.md")
@@ -461,7 +463,7 @@ class ManagerAgent(BaseAgent):
                 llm_decision = ask_llm_after_task_execution(
                     task_execution_payload=payload,
                     requirements_md=requirements_content,
-                    status_md=status_content,
+                    status_md=status_content + f"\n\nTask execution status: {code_generation_status}",
                     agents_and_caps=agents_and_caps
                 )
 

@@ -18,7 +18,7 @@ def init_repo():
     repo_path = get_repo_path(repo_name)
     try:
         os.makedirs(repo_path, exist_ok=True)
-        Repo.init(repo_path, bare=True)
+        Repo.init(repo_path, bare=False)
         return jsonify({'message': f'Initialized repository {repo_name}', 'repo_path': repo_path})
     except Exception as e:
         abort(500, str(e))
