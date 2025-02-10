@@ -1,0 +1,20 @@
+# Web framework for FileServer, Frontend, and Agent Registry
+Flask==2.2.5
+
+# HTTP client library used by AgentService and ManagerAgent
+requests==2.32.3
+
+# RabbitMQ messaging library used in BaseAgent and Frontend
+pika==1.3.2
+
+# Environment variable loader (used in various modules)
+python-dotenv==1.0.1
+
+# Google Generative AI SDK (provides google.genai and google.genai.types)
+google-genai
+
+# Git interaction library used by GitService
+GitPython==3.1.31
+
+# (Optional) Testing framework for running local tests (e.g. in DeveloperAgent)
+pytest

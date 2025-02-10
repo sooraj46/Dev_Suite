@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory, abort
+from flask import Flask, request, jsonify
 import os
 import uuid
 import glob
@@ -22,12 +22,25 @@ if not os.path.exists(BASE_DIR):
 
 
 def is_path_allowed(path: str) -> bool:
-    """Ensure the absolute path is under one of the allowed directories."""
+    """
+    Check if the given absolute path is within one of the allowed directories.
+    """
     abs_path = os.path.abspath(path)
     for allowed in ALLOWED_DIRS:
-        if abs_path.startswith(os.path.abspath(allowed)):
+        allowed_abs = os.path.abspath(allowed)
+        if os.path.commonpath([abs_path, allowed_abs]) == allowed_abs:
             return True
     return False
+
+
+def get_full_path(path: str) -> str:
+    """
+    Convert a given path to an absolute path relative to BASE_DIR
+    if it is not already absolute.
+    """
+    if os.path.isabs(path):
+        return os.path.abspath(path)
+    return os.path.abspath(os.path.join(BASE_DIR, path))
 
 
 @app.route('/read_file', methods=['GET'])
@@ -35,17 +48,18 @@ def read_file():
     """
     Read complete contents of a file.
     Query Parameter: 
-      - path (string): relative or absolute path to the file.
+      - path (string): relative (to BASE_DIR) or absolute path to the file.
     """
     path = request.args.get('path')
     if not path:
         return jsonify({'error': 'Path parameter is required.'}), 400
 
-    if not is_path_allowed(path):
+    full_path = get_full_path(path)
+    if not is_path_allowed(full_path):
         return jsonify({'error': 'Access to this path is not allowed.'}), 403
 
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(full_path, "r", encoding="utf-8") as f:
             content = f.read()
         return jsonify({'content': content}), 200
     except Exception as e:
@@ -66,11 +80,12 @@ def read_multiple_files():
 
     results = {}
     for path in data["paths"]:
-        if not is_path_allowed(path):
+        full_path = get_full_path(path)
+        if not is_path_allowed(full_path):
             results[path] = {"error": "Access not allowed."}
             continue
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(full_path, "r", encoding="utf-8") as f:
                 results[path] = {"content": f.read()}
         except Exception as e:
             results[path] = {"error": str(e)}
@@ -80,7 +95,7 @@ def read_multiple_files():
 @app.route('/write_file', methods=['POST'])
 def write_file():
     """
-    Create a new file or overwrite existing.
+    Create a new file or overwrite an existing one.
     Expected JSON Input:
       { "path": "file_path", "content": "File content" }
     """
@@ -91,13 +106,14 @@ def write_file():
     path = data["path"]
     content = data["content"]
 
-    if not is_path_allowed(path):
+    full_path = get_full_path(path)
+    if not is_path_allowed(full_path):
         return jsonify({'error': 'Access to this path is not allowed.'}), 403
 
     try:
         # Ensure parent directories exist.
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        with open(full_path, "w", encoding="utf-8") as f:
             f.write(content)
         return jsonify({'message': 'File written successfully.'}), 200
     except Exception as e:
@@ -140,11 +156,12 @@ def edit_file():
     normalize_whitespace = options.get("normalizeWhitespace", True)
     partial_match = options.get("partialMatch", True)
 
-    if not is_path_allowed(path):
+    full_path = get_full_path(path)
+    if not is_path_allowed(full_path):
         return jsonify({'error': 'Access to this path is not allowed.'}), 403
 
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(full_path, "r", encoding="utf-8") as f:
             original_content = f.read()
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -158,10 +175,10 @@ def edit_file():
         if not old_text:
             continue
 
-        # If partialMatch enabled, do a simple substring replacement.
+        # Simple substring replacement (partialMatch is enabled by default).
         new_content = new_content.replace(old_text, new_text)
 
-    # Normalize whitespace if needed (very basic implementation).
+    # Normalize whitespace if needed.
     if normalize_whitespace:
         new_content = "\n".join(line.strip() for line in new_content.splitlines())
 
@@ -181,7 +198,7 @@ def edit_file():
         }), 200
     else:
         try:
-            with open(path, "w", encoding="utf-8") as f:
+            with open(full_path, "w", encoding="utf-8") as f:
                 f.write(new_content)
             return jsonify({'message': 'File edited successfully.'}), 200
         except Exception as e:
@@ -200,11 +217,12 @@ def create_directory():
         return jsonify({'error': 'JSON payload with "path" required.'}), 400
 
     path = data["path"]
-    if not is_path_allowed(path):
+    full_path = get_full_path(path)
+    if not is_path_allowed(full_path):
         return jsonify({'error': 'Access to this path is not allowed.'}), 403
 
     try:
-        os.makedirs(path, exist_ok=True)
+        os.makedirs(full_path, exist_ok=True)
         return jsonify({'message': 'Directory created or already exists.'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -215,25 +233,28 @@ def list_directory():
     """
     List directory contents with [FILE] or [DIR] prefixes.
     Query Parameter:
-      - path (string): directory path to list (default is BASE_DIR).
+      - path (string): directory path to list (relative to BASE_DIR; default is BASE_DIR).
     """
-    path = request.args.get("path", BASE_DIR)
-    if not is_path_allowed(path):
+    # If no path is provided, use BASE_DIR.
+    rel_path = request.args.get("path", "")
+    full_path = get_full_path(rel_path) if rel_path else BASE_DIR
+
+    if not is_path_allowed(full_path):
         return jsonify({'error': 'Access to this path is not allowed.'}), 403
 
-    if not os.path.isdir(path):
+    if not os.path.isdir(full_path):
         return jsonify({'error': 'Specified path is not a directory.'}), 400
 
     try:
-        items = os.listdir(path)
+        items = os.listdir(full_path)
         results = []
         for item in items:
-            full_item = os.path.join(path, item)
+            full_item = os.path.join(full_path, item)
             if os.path.isdir(full_item):
                 results.append(f"[DIR] {item}")
             else:
                 results.append(f"[FILE] {item}")
-        return jsonify({'directory': path, 'contents': results}), 200
+        return jsonify({'directory': full_path, 'contents': results}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -244,7 +265,7 @@ def move_file():
     Move or rename files and directories.
     Expected JSON Input:
       { "source": "source_path", "destination": "destination_path" }
-    Fails if destination exists.
+    Fails if the destination exists.
     """
     data = request.get_json()
     if not data or "source" not in data or "destination" not in data:
@@ -253,19 +274,22 @@ def move_file():
     source = data["source"]
     destination = data["destination"]
 
-    if not is_path_allowed(source) or not is_path_allowed(destination):
+    source_full = get_full_path(source)
+    destination_full = get_full_path(destination)
+
+    if not is_path_allowed(source_full) or not is_path_allowed(destination_full):
         return jsonify({'error': 'Access to source or destination is not allowed.'}), 403
 
-    if not os.path.exists(source):
+    if not os.path.exists(source_full):
         return jsonify({'error': 'Source file/directory does not exist.'}), 404
 
-    if os.path.exists(destination):
+    if os.path.exists(destination_full):
         return jsonify({'error': 'Destination already exists.'}), 400
 
     try:
         # Ensure the destination directory exists.
-        os.makedirs(os.path.dirname(destination), exist_ok=True)
-        shutil.move(source, destination)
+        os.makedirs(os.path.dirname(destination_full), exist_ok=True)
+        shutil.move(source_full, destination_full)
         return jsonify({'message': 'File/directory moved successfully.'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -276,24 +300,24 @@ def search_files():
     """
     Recursively search for files/directories.
     Query Parameters:
-      - path (string): Starting directory.
+      - path (string): Starting directory (relative to BASE_DIR; default is BASE_DIR).
       - pattern (string): Search pattern.
       - excludePatterns (string): Comma-separated list of patterns to exclude.
     Case-insensitive matching is applied.
     Returns full paths to matches.
     """
-    start_path = request.args.get("path", BASE_DIR)
+    rel_path = request.args.get("path", "")
+    full_start_path = get_full_path(rel_path) if rel_path else BASE_DIR
     pattern = request.args.get("pattern", "*")
     exclude_patterns = request.args.get("excludePatterns", "")
     exclude_list = [p.strip() for p in exclude_patterns.split(",")] if exclude_patterns else []
 
-    if not is_path_allowed(start_path):
+    if not is_path_allowed(full_start_path):
         return jsonify({'error': 'Access to this path is not allowed.'}), 403
 
     matches = []
     try:
-        for root, dirs, files in os.walk(start_path):
-            # Combine files and directories for search.
+        for root, dirs, files in os.walk(full_start_path):
             for name in files + dirs:
                 # Case-insensitive match.
                 if glob.fnmatch.fnmatch(name.lower(), pattern.lower()):
@@ -312,27 +336,28 @@ def get_file_info():
     """
     Get detailed file/directory metadata.
     Query Parameter:
-      - path (string): The file or directory to inspect.
-    Returns: Size, Creation time, Modified time, Access time, Type, and Permissions.
+      - path (string): The file or directory to inspect (relative to BASE_DIR).
+    Returns: Size, creation time, modified time, access time, type, and permissions.
     """
     path = request.args.get("path")
     if not path:
         return jsonify({'error': 'Path parameter is required.'}), 400
 
-    if not is_path_allowed(path):
+    full_path = get_full_path(path)
+    if not is_path_allowed(full_path):
         return jsonify({'error': 'Access to this path is not allowed.'}), 403
 
-    if not os.path.exists(path):
+    if not os.path.exists(full_path):
         return jsonify({'error': 'Path does not exist.'}), 404
 
     try:
-        stat_info = os.stat(path)
+        stat_info = os.stat(full_path)
         file_info = {
             "size": stat_info.st_size,
             "creation_time": datetime.datetime.fromtimestamp(stat_info.st_ctime).isoformat(),
             "modified_time": datetime.datetime.fromtimestamp(stat_info.st_mtime).isoformat(),
             "access_time": datetime.datetime.fromtimestamp(stat_info.st_atime).isoformat(),
-            "type": "directory" if os.path.isdir(path) else "file",
+            "type": "directory" if os.path.isdir(full_path) else "file",
             "permissions": oct(stat_info.st_mode)[-3:]
         }
         return jsonify({'file_info': file_info}), 200
@@ -360,5 +385,4 @@ def server_error(error):
     return jsonify({'error': 'Internal server error'}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
-
+    app.run(debug=True, port=6000)

@@ -4,7 +4,7 @@ from urllib.parse import urljoin
 
 # --- Configuration ---
 # Base URL for the file server (adjust host and port as needed)
-FILE_SERVER_BASE_URL = "http://localhost:5000/"
+FILE_SERVER_BASE_URL = "http://localhost:6000/"
 # Base path on the file server where the repo will be stored.
 # This path must be under one of the allowed directories configured in the file server.
 FILE_SERVER_REPO_BASE = "uploads/repo"

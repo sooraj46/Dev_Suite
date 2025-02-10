@@ -1,11 +1,14 @@
-from flask import Flask, request, jsonify, abort
-import threading
+import os
 import time
+import threading
+from flask import Flask, request, jsonify
+
 
 # --- Capability Registry Class ---
 
 class CapabilityRegistry:
     def __init__(self):
+        # _registry maps agent_name -> {"capabilities": [...], "last_heartbeat": <timestamp>}
         self._registry = {}
         self._lock = threading.Lock()
 
@@ -24,16 +27,19 @@ class CapabilityRegistry:
                 self._registry[agent_name]['last_heartbeat'] = time.time()
 
     def unregister(self, agent_name):
+        """Unregister an agent from the in-memory store."""
         with self._lock:
             if agent_name in self._registry:
                 del self._registry[agent_name]
 
     def get_capabilities(self, agent_name):
+        """Retrieve the list of capabilities for a specific agent."""
         with self._lock:
             agent_info = self._registry.get(agent_name)
             return agent_info['capabilities'] if agent_info else []
 
     def list_agents(self):
+        """List all registered agents with their capabilities (no timestamps)."""
         with self._lock:
             return {k: v['capabilities'] for k, v in self._registry.items()}
 
@@ -48,6 +54,7 @@ class CapabilityRegistry:
                 if now - data['last_heartbeat'] > timeout:
                     unhealthy.append(agent_name)
             return unhealthy
+
 
 # Global registry instance
 registry = CapabilityRegistry()
@@ -73,7 +80,9 @@ def register():
         return jsonify({"error": "agent_name and capabilities are required"}), 400
 
     registry.register(agent_name, capabilities)
-    return jsonify({"message": f"Agent '{agent_name}' registered with capabilities: {capabilities}"}), 200
+    return jsonify({
+        "message": f"Agent '{agent_name}' registered with capabilities: {capabilities}"
+    }), 200
 
 @app.route('/heartbeat', methods=['POST'])
 def heartbeat():
@@ -125,6 +134,7 @@ def list_agents():
     List all registered agents with their capabilities.
     """
     agents = registry.list_agents()
+    print(jsonify(agents))
     return jsonify(agents), 200
 
 @app.route('/check_agent_health', methods=['GET'])
@@ -138,5 +148,35 @@ def check_agent_health():
     unhealthy = registry.check_agent_health(timeout)
     return jsonify({"unhealthy_agents": unhealthy}), 200
 
+
+# --- Background Thread for Automatic Deregistration ---
+
+def auto_deregister_stale_agents(interval=60, timeout=120):
+    """
+    Periodically checks for stale agents that haven't heartbeated within 'timeout' seconds
+    and unregisters them automatically.
+    """
+    while True:
+        time.sleep(interval)
+        try:
+            stale_agents = registry.check_agent_health(timeout)
+            for agent in stale_agents:
+                registry.unregister(agent)
+                app.logger.info(f"Automatically unregistered stale agent: {agent}")
+        except Exception as e:
+            # Log the exception but continue looping
+            app.logger.error(f"Error in auto_deregister_stale_agents: {e}")
+
+
 if __name__ == '__main__':
+    # Start a background thread to clean up stale agents
+    cleanup_thread = threading.Thread(
+        target=auto_deregister_stale_agents,
+        args=(60, 120),  # check every 60s, timeout for agents is 120s
+        daemon=True
+    )
+    cleanup_thread.start()
+
+    # For production, consider:
+    #   gunicorn agentregistry:app -b 0.0.0.0:5005
     app.run(host='0.0.0.0', port=5005)

@@ -74,7 +74,7 @@ class BaseAgent(ABC):
 
         channel.basic_publish(
             exchange="",
-            routing_key=self.queue_name,
+            routing_key=receiver + "Queue",
             body=json.dumps(message),
             properties=pika.BasicProperties(
                 delivery_mode=2,  # Make messages persistent

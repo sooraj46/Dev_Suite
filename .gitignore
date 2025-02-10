@@ -6,3 +6,13 @@ GitService/venv/
 GitService/.env
 AgentService/venv/
 AgentService/.env
+AgentRegistry/__pycache__/
+AgentRegistry/.pytest_cache/
+venv/
+AgentRegistry/agentregistry.log
+AgentService/developeragent.log
+AgentService/manageragent.log
+Fileserver/fileserver.log
+GitService/gitservice.log
+FrontendService/frontend_app.log
+.DS_Store

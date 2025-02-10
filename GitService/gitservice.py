@@ -4,7 +4,7 @@ from flask import Flask, request, jsonify, abort
 from git import Repo, GitCommandError
 
 app = Flask(__name__)
-GIT_BASE_DIR = '/data/git_repos'  # Ensure this folder is created and writable
+GIT_BASE_DIR = '/Users/soorajjayasundaram/upload/uploads'  # Ensure this folder is created and writable
 
 def get_repo_path(repo_name):
     return os.path.join(GIT_BASE_DIR, repo_name)
