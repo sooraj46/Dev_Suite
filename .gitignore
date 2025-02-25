@@ -16,3 +16,9 @@ Fileserver/fileserver.log
 GitService/gitservice.log
 FrontendService/frontend_app.log
 .DS_Store
+CLAUDE.md
+SWE Agent Ecosystem.svg
+AgentService/temp/
+
+AgentService/testagent.log
+ServiceManager/servicemanager.log

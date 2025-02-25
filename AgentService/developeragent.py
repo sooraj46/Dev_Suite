@@ -408,8 +408,41 @@ class DeveloperAgent(BaseAgent):
                 last_error_message = None
                 previous_code = payload.get("previous_code", None)
 
+                # Send initial progress update to frontend
+                progress_payload = {
+                    "stage": "start",
+                    "message": "Starting code generation",
+                    "project_name": project_config.get("project_name", "unknown"),
+                    "project_config": project_config,
+                }
+                self.send_message(
+                    receiver="ManagerAgent",
+                    message_type="PROGRESS_UPDATE",
+                    payload=progress_payload,
+                    progress=0.0
+                )
+
                 for attempt_num in range(1, self.MAX_GENERATION_ATTEMPTS + 1):
                     logger.info(f"[{self.agent_name}] Code generation attempt {attempt_num}/{self.MAX_GENERATION_ATTEMPTS}")
+                    
+                    # Calculate progress based on attempt number (for frontend UI updates)
+                    attempt_progress = (attempt_num - 1) / self.MAX_GENERATION_ATTEMPTS
+                    
+                    # Send progress update
+                    progress_payload = {
+                        "stage": "generating",
+                        "message": f"Generating code (Attempt {attempt_num}/{self.MAX_GENERATION_ATTEMPTS})",
+                        "attempt": attempt_num,
+                        "max_attempts": self.MAX_GENERATION_ATTEMPTS,
+                        "project_name": project_config.get("project_name", "unknown"),
+                        "project_config": project_config,
+                    }
+                    self.send_message(
+                        receiver="ManagerAgent",
+                        message_type="PROGRESS_UPDATE",
+                        payload=progress_payload,
+                        progress=attempt_progress
+                    )
 
                     # Generate code
                     generated_files = generate_code_files(
@@ -430,10 +463,57 @@ class DeveloperAgent(BaseAgent):
                             development_status_path,
                             f"Attempt {attempt_num} failed: {last_error_message}"
                         )
+                        
+                        # Send error update
+                        progress_payload = {
+                            "stage": "error",
+                            "message": f"Code generation failed: {last_error_message}",
+                            "attempt": attempt_num,
+                            "project_name": project_config.get("project_name", "unknown"),
+                            "error": last_error_message,
+                            "project_config": project_config,
+                        }
+                        self.send_message(
+                            receiver="ManagerAgent",
+                            message_type="PROGRESS_UPDATE",
+                            payload=progress_payload,
+                            progress=attempt_progress
+                        )
                         continue
+
+                    # Send file generation update
+                    progress_payload = {
+                        "stage": "files_generated",
+                        "message": f"Generated {len(generated_files)} files",
+                        "attempt": attempt_num,
+                        "files": list(generated_files.keys()),
+                        "project_name": project_config.get("project_name", "unknown"),
+                        "project_config": project_config,
+                    }
+                    self.send_message(
+                        receiver="ManagerAgent",
+                        message_type="PROGRESS_UPDATE",
+                        payload=progress_payload,
+                        progress=attempt_progress + 0.1
+                    )
 
                     # If local testing is requested, attempt to run the code to see if errors occur
                     if test_locally:
+                        # Send testing update
+                        progress_payload = {
+                            "stage": "testing",
+                            "message": "Testing generated code",
+                            "attempt": attempt_num,
+                            "project_name": project_config.get("project_name", "unknown"),
+                            "project_config": project_config,
+                        }
+                        self.send_message(
+                            receiver="ManagerAgent",
+                            message_type="PROGRESS_UPDATE",
+                            payload=progress_payload,
+                            progress=attempt_progress + 0.15
+                        )
+                        
                         agent_dir = os.path.dirname(os.path.abspath(__file__))
                         temp_base_dir = os.path.join(agent_dir, "temp")
                         os.makedirs(temp_base_dir, exist_ok=True)
@@ -443,6 +523,21 @@ class DeveloperAgent(BaseAgent):
                             if ok:
                                 final_generated_files = generated_files
                                 success = True
+                                
+                                # Send success update
+                                progress_payload = {
+                                    "stage": "test_success",
+                                    "message": "Code tests passed successfully",
+                                    "attempt": attempt_num,
+                                    "project_name": project_config.get("project_name", "unknown"),
+                                    "project_config": project_config,
+                                }
+                                self.send_message(
+                                    receiver="ManagerAgent",
+                                    message_type="PROGRESS_UPDATE",
+                                    payload=progress_payload,
+                                    progress=0.8
+                                )
                                 break
                             else:
                                 last_error_message = err
@@ -450,12 +545,43 @@ class DeveloperAgent(BaseAgent):
                                     development_status_path,
                                     f"Attempt {attempt_num} had error. Retrying with error:\n{err}"
                                 )
+                                
+                                # Send error update
+                                progress_payload = {
+                                    "stage": "test_error",
+                                    "message": f"Testing failed, will retry",
+                                    "attempt": attempt_num,
+                                    "error": err,
+                                    "project_name": project_config.get("project_name", "unknown"),
+                                    "project_config": project_config,
+                                }
+                                self.send_message(
+                                    receiver="ManagerAgent",
+                                    message_type="PROGRESS_UPDATE",
+                                    payload=progress_payload,
+                                    progress=attempt_progress + 0.2
+                                )
                                 # Use current generated files as "previous_code" for the next iteration
                                 previous_code = generated_files
                     else:
                         # If not testing locally, we consider it a success after generation
                         final_generated_files = generated_files
                         success = True
+                        
+                        # Send success update (skipped testing)
+                        progress_payload = {
+                            "stage": "generation_complete",
+                            "message": "Code generation complete (testing skipped)",
+                            "attempt": attempt_num,
+                            "project_name": project_config.get("project_name", "unknown"),
+                            "project_config": project_config,
+                        }
+                        self.send_message(
+                            receiver="ManagerAgent",
+                            message_type="PROGRESS_UPDATE",
+                            payload=progress_payload,
+                            progress=0.8
+                        )
                         break
 
                 # -----------------------------------------------------------------
@@ -468,6 +594,21 @@ class DeveloperAgent(BaseAgent):
                     response_payload["generated_files"] = list(final_generated_files.keys())
                     response_payload["code_generation_status"] = "success"
 
+                    # Send uploading update
+                    progress_payload = {
+                        "stage": "uploading",
+                        "message": "Uploading files to File Server",
+                        "project_name": project_config.get("project_name", "unknown"),
+                        "project_config": project_config,
+                        "files": list(final_generated_files.keys())
+                    }
+                    self.send_message(
+                        receiver="ManagerAgent",
+                        message_type="PROGRESS_UPDATE",
+                        payload=progress_payload,
+                        progress=0.85
+                    )
+
                     # Push to file server if requested
                     if upload_to_file_server_flag and file_server_folder:
                         push_results = self.push_multiple_files_to_server(file_server_folder, final_generated_files)
@@ -479,14 +620,44 @@ class DeveloperAgent(BaseAgent):
                         "Code generation complete. Tests passed (or tests disabled)."
                     )
 
-                    # Commit to Git if repo is specified
+                    # Send commit update if needed
                     if git_repo:
+                        progress_payload = {
+                            "stage": "committing",
+                            "message": "Committing changes to Git repository",
+                            "project_name": project_config.get("project_name", "unknown"),
+                            "project_config": project_config,
+                            "repo": git_repo
+                        }
+                        self.send_message(
+                            receiver="ManagerAgent",
+                            message_type="PROGRESS_UPDATE",
+                            payload=progress_payload,
+                            progress=0.9
+                        )
+                        
+                        # Commit to Git if repo is specified
                         git_result = self.commit_to_git(git_repo, commit_message, final_generated_files)
                         response_payload["git_commit"] = git_result
 
                     self.update_development_status(
                         development_status_path,
                         f"Changes committed to Git repo: {git_repo}"
+                    )
+
+                    # Send completion update
+                    progress_payload = {
+                        "stage": "complete",
+                        "message": "Task completed successfully",
+                        "project_name": project_config.get("project_name", "unknown"),
+                        "project_config": project_config,
+                        "file_count": len(final_generated_files)
+                    }
+                    self.send_message(
+                        receiver="ManagerAgent",
+                        message_type="PROGRESS_UPDATE",
+                        payload=progress_payload,
+                        progress=1.0
                     )
 
                 else:
@@ -500,6 +671,21 @@ class DeveloperAgent(BaseAgent):
                     self.update_development_status(
                         development_status_path,
                         f"All {self.MAX_GENERATION_ATTEMPTS} attempts failed. Aborting."
+                    )
+                    
+                    # Send failure update
+                    progress_payload = {
+                        "stage": "failed",
+                        "message": f"Task failed after {self.MAX_GENERATION_ATTEMPTS} attempts",
+                        "project_name": project_config.get("project_name", "unknown"),
+                        "project_config": project_config,
+                        "error": last_error_message or "Unknown error"
+                    }
+                    self.send_message(
+                        receiver="ManagerAgent",
+                        message_type="PROGRESS_UPDATE",
+                        payload=progress_payload,
+                        progress=1.0  # We're still at 100% complete, just with failure status
                     )
 
                 # Finally, send a response message back to the sender (e.g., ManagerAgent).

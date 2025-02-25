@@ -57,8 +57,17 @@ class BaseAgent(ABC):
             self.send_heartbeat()
             time.sleep(30)
 
-    def send_message(self, receiver, message_type, payload):
-        """Sends a message to another agent through the message queue."""
+    def send_message(self, receiver, message_type, payload, progress=None):
+        """
+        Sends a message to another agent through the message queue.
+        
+        Args:
+            receiver (str): The name of the receiver agent
+            message_type (str): Type of message being sent
+            payload (dict): The message payload
+            progress (float, optional): Optional progress indicator (0.0 to 1.0)
+                                       for tracking task completion percentage
+        """
         connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.message_queue_host))
         channel = connection.channel()
         channel.queue_declare(queue=self.queue_name, durable=True)
@@ -69,7 +78,8 @@ class BaseAgent(ABC):
             "receiver": receiver,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "type": message_type,
-            "payload": payload
+            "payload": payload,
+            "progress": progress  # Include progress indicator if provided
         }
 
         channel.basic_publish(

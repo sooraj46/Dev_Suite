@@ -297,19 +297,35 @@ def create_project_in_fileserver(requirement_text: str) -> dict:
     }
 
 
-def forward_task_execution_to_frontend(payload: dict):
+def forward_message_to_frontend(message_type: str, payload: dict, progress: float = None):
     """
-    Forwards the TASK_EXECUTION message payload from the DeveloperAgent
-    to the Frontend Service. This function sends an HTTP POST request
-    to the Frontend Service's /receive_task_execution endpoint.
+    Forwards messages from agent services to the Frontend Service. This supports
+    both task execution results and progress updates.
+    
+    Args:
+        message_type (str): Type of message being forwarded (e.g., "TASK_EXECUTION", "PROGRESS_UPDATE")
+        payload (dict): The message payload
+        progress (float, optional): Progress indicator for tasks (0.0 to 1.0)
     """
     try:
         url = f"{FRONTEND_SERVICE_URL}/receive_task_execution"
-        response = requests.post(url, json=payload, timeout=10)
+        
+        # Create the complete message with all required fields
+        message = {
+            "message_id": str(time.time()),  # Using timestamp as unique ID
+            "sender": "ManagerAgent",
+            "receiver": "FrontendUI",
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "type": message_type,
+            "payload": payload,
+            "progress": progress
+        }
+        
+        response = requests.post(url, json=message, timeout=10)
         response.raise_for_status()
-        logger.info(f"[ManagerAgent] Successfully forwarded TASK_EXECUTION to Frontend. Response: {response.text}")
+        logger.info(f"[ManagerAgent] Successfully forwarded {message_type} to Frontend. Response: {response.text}")
     except Exception as e:
-        logger.exception(f"[ManagerAgent] Failed to forward TASK_EXECUTION to Frontend: {e}")
+        logger.exception(f"[ManagerAgent] Failed to forward {message_type} to Frontend: {e}")
 
 
 def post_clarification_request_to_frontend(
@@ -438,12 +454,20 @@ class ManagerAgent(BaseAgent):
                         reason="Fallback"
                     )
 
+            elif msg_type == "PROGRESS_UPDATE":
+                # Process progress update messages from agents
+                logger.info(f"[{self.agent_name}] Received PROGRESS_UPDATE from {message.get('sender', 'unknown')}")
+                
+                # Forward progress updates to the frontend
+                progress = message.get("progress", 0.0)
+                forward_message_to_frontend("PROGRESS_UPDATE", payload, progress)
+                
             elif msg_type == "TASK_EXECUTION":
                 # Process TASK_EXECUTION message from DeveloperAgent
                 logger.info(f"[{self.agent_name}] Received TASK_EXECUTION message from DeveloperAgent with payload: {payload}")
 
                 # 1) Forward the task execution result to the Frontend Service
-                forward_task_execution_to_frontend(payload)
+                forward_message_to_frontend("TASK_EXECUTION", payload)
 
                 # 2) Attempt to read the project_config from the payload to identify the project paths
                 code_generation_status = payload.get("code_generation_status", "failure")
