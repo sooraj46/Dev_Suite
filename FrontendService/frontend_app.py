@@ -1115,17 +1115,122 @@ def list_projects():
     return index()
 
 
+def build_context():
+    """
+    Gathers the data normally passed to your Jinja template,
+    including projects, statuses, clarifications, tasks, etc.
+    Returns a dictionary that can be unpacked with **context
+    when calling render_template_string.
+    """
+    global pending_clarification, task_executions_log
+    
+    projects = []
+    project_statuses = {}
+
+    # --- Fetch project list/status the same way you do in index() ---
+    try:
+        list_url = f"{FILE_SERVER_BASE_URL}/list_directory"
+        params = {"path": "uploads"}
+        resp = requests.get(list_url, params=params, timeout=5)
+        resp.raise_for_status()
+        data = resp.json()
+        project_dirs = [
+            item.replace("[DIR] ", "")
+            for item in data.get("contents", [])
+            if item.startswith("[DIR]")
+        ]
+
+        # For each project, get the status info
+        for project_name in project_dirs:
+            status_path = f"uploads/{project_name}/status.md"
+            try:
+                status_url = f"{FILE_SERVER_BASE_URL}/read_file"
+                status_resp = requests.get(status_url, params={"path": status_path}, timeout=5)
+
+                if status_resp.status_code == 200:
+                    status_data = status_resp.json()
+                    status_content = status_data.get("content", "No status available")
+
+                    # Determine project state
+                    if "Project marked as completed" in status_content:
+                        state = "completed"
+                    elif "testing" in status_content.lower():
+                        state = "testing"
+                    elif "generating" in status_content.lower():
+                        state = "development"
+                    elif "Received TASK_ASSIGNMENT" in status_content:
+                        state = "assigned"
+                    elif "Project initialized" in status_content:
+                        state = "initialized"
+                    else:
+                        state = "unknown"
+
+                    project_statuses[project_name] = {
+                        "status_content": status_content,
+                        "state": state
+                    }
+                else:
+                    project_statuses[project_name] = {
+                        "status_content": "Unable to fetch status",
+                        "state": "unknown"
+                    }
+            except Exception as e:
+                project_statuses[project_name] = {
+                    "status_content": f"Error fetching status: {str(e)}",
+                    "state": "error"
+                }
+
+        projects = [
+            {"name": name, **status}
+            for name, status in project_statuses.items()
+        ]
+    except Exception as e:
+        print(f"Error listing projects directory: {e}")
+
+    # --- Build display_tasks from task_executions_log ---
+    display_tasks = []
+    for t in task_executions_log:
+        # Attempt to pull a project_name if present
+        project_name = None
+        if ("project_config" in t.get("payload", {}) and 
+            "project_name" in t.get("payload", {}).get("project_config", {})):
+            project_name = t["payload"]["project_config"]["project_name"]
+        elif "project_name" in t.get("payload", {}):
+            project_name = t["payload"]["project_name"]
+
+        display_tasks.append({
+            "type": t.get("type", ""),
+            "timestamp": t.get("timestamp", ""),
+            "payload": t.get("payload", {}),
+            "progress": t.get("progress", 0.0),
+            "sender": t.get("sender", ""),
+            "receiver": t.get("receiver", ""),
+            "status": t.get("status", ""),
+            "reason": t.get("reason", "N/A"),
+            "project_name": project_name,
+            "message_id": t.get("message_id", "")
+        })
+
+    return {
+        "projects": projects,
+        "project_statuses": project_statuses,
+        "clarification_request": pending_clarification,
+        "task_executions": display_tasks
+    }
+
+
 @app.route("/view_project_status", methods=["GET"])
 def view_project_status():
     """
-    Reads a status file (e.g., status.md, developmentstatus.md, or test_results.md) from the File Server.
-    The user provides 'projectPath' (e.g. 'uploads/xyz/status.md') or 'projectName' and 'fileType'.
+    Reads a status file (like 'status.md') from the File Server
+    based on either 'projectPath' or 'projectName'+'fileType'.
+    Injects that file’s content into the same template used by index().
     """
     project_path = request.args.get("projectPath", "").strip()
     project_name = request.args.get("projectName", "").strip()
     file_type = request.args.get("fileType", "status").strip()
-    
-    # If project_name and file_type are provided, construct the path
+
+    # If project_name & file_type are provided, construct the path
     if project_name and not project_path:
         if file_type == "status":
             project_path = f"uploads/{project_name}/status.md"
@@ -1135,10 +1240,11 @@ def view_project_status():
             project_path = f"uploads/{project_name}/test_results.md"
         elif file_type == "requirements":
             project_path = f"uploads/{project_name}/requirements.md"
-    
+
     if not project_path:
         return "Please provide a valid status file path or project name and file type!", 400
 
+    # Attempt to read the file
     content = ""
     try:
         read_url = f"{FILE_SERVER_BASE_URL}/read_file"
@@ -1149,20 +1255,17 @@ def view_project_status():
     except Exception as e:
         content = f"Error reading file: {e}"
 
-    # Call the index function to get the full context with projects and tasks
-    index_response = index()
-    
-    # Modify the response to include the status file content
-    context = index_response.__dict__["_get_current_object"].__self__.context
-    context['status_file_content'] = content
-    context['current_project_path'] = project_path
+    # Build the base context (same data as the index page)
+    ctx = build_context()
+
+    # Inject the “status file” content and current project info
+    ctx["status_file_content"] = content
+    ctx["current_project_path"] = project_path
     if project_name:
-        context['current_project_name'] = project_name
-    
-    return render_template_string(
-        INDEX_HTML,
-        **context
-    )
+        ctx["current_project_name"] = project_name
+
+    # Render the same template you use in index()
+    return render_template_string(INDEX_HTML, **ctx)
 
 
 @app.route("/receive_clarification_request", methods=["POST"])
