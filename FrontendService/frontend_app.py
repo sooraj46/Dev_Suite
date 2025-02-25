@@ -965,10 +965,10 @@ def index():
                         state = "completed"
                     elif "testing" in status_content.lower():
                         state = "testing"
-                    elif "generating" in status_content.lower():
-                        state = "development"
-                    elif "Received TASK_ASSIGNMENT" in status_content:
+                    elif "Task assigned to" in status_content or "Assigned next task to" in status_content:
                         state = "assigned"
+                    elif "generating" in status_content.lower() or "code generation" in status_content.lower():
+                        state = "development"
                     elif "Project initialized" in status_content:
                         state = "initialized"
                     else:
@@ -1156,10 +1156,10 @@ def build_context():
                         state = "completed"
                     elif "testing" in status_content.lower():
                         state = "testing"
-                    elif "generating" in status_content.lower():
-                        state = "development"
-                    elif "Received TASK_ASSIGNMENT" in status_content:
+                    elif "Task assigned to" in status_content or "Assigned next task to" in status_content:
                         state = "assigned"
+                    elif "generating" in status_content.lower() or "code generation" in status_content.lower():
+                        state = "development"
                     elif "Project initialized" in status_content:
                         state = "initialized"
                     else:
@@ -1249,9 +1249,18 @@ def view_project_status():
     try:
         read_url = f"{FILE_SERVER_BASE_URL}/read_file"
         resp = requests.get(read_url, params={"path": project_path}, timeout=5)
-        resp.raise_for_status()
-        data = resp.json()
-        content = data.get("content", "")
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            content = data.get("content", "")
+        elif resp.status_code == 404 or "error" in resp.json():
+            # File might not exist yet, provide a helpful message based on file type
+            if file_type == "development":
+                content = "Development status file has not been created yet. It will be created when code generation starts."
+            elif file_type == "test":
+                content = "Test results file has not been created yet. It will be created when testing is performed."
+            else:
+                content = f"This file ({project_path}) does not exist yet."
     except Exception as e:
         content = f"Error reading file: {e}"
 

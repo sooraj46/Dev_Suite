@@ -59,10 +59,19 @@ def read_file():
         return jsonify({'error': 'Access to this path is not allowed.'}), 403
 
     try:
+        if not os.path.exists(full_path):
+            # Return a 404 with a message rather than a 500 error
+            return jsonify({
+                'error': 'File not found',
+                'file_path': path
+            }), 404
+        
         with open(full_path, "r", encoding="utf-8") as f:
             content = f.read()
         return jsonify({'content': content}), 200
     except Exception as e:
+        # Log the error for debugging
+        app.logger.error(f"Error reading file {path}: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
