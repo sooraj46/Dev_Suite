@@ -31,24 +31,17 @@ if [ -z "$VIRTUAL_ENV" ]; then
   echo "WARNING: No virtual environment active. Run 'source venv/bin/activate' before deploying."
 fi
 
-# Start Agent Registry
-start_service "./Dev_Suite/AgentRegistry" "agentregistry.py" "agentregistry.log"
+# Start Service Manager which will start all other services
+start_service "./Dev_Suite/ServiceManager" "servicemanager.py" "servicemanager.log"
 
-# Start File Server
-start_service "./Dev_Suite/FileServer" "fileserver.py" "fileserver.log"
-
-# Start Git Service
-start_service "./Dev_Suite/GitService" "gitservice.py" "gitservice.log"
-
-# Start Developer Agent (Agent Service)
-start_service "./Dev_Suite/AgentService" "developeragent.py" "developeragent.log"
-
-# Start Manager Agent (also in AgentService folder)
-# (We assume manageragent.py is also in the AgentService directory)
-start_service "./Dev_Suite/AgentService" "manageragent.py" "manageragent.log"
-
-# Start Frontend Service
-start_service "./Dev_Suite/FrontendService" "frontend_app.py" "frontend_app.log"
+# Note: The Service Manager will start the following services automatically:
+# - AgentRegistry (agentregistry.py)
+# - FileServer (fileserver.py)
+# - GitService (gitservice.py)
+# - ManagerAgent (manageragent.py)
+# - DeveloperAgent (developeragent.py)
+# - TestingAgent (testagent.py)
+# - FrontendService (frontend_app.py)
 
 echo "-------------------------------------------------------------"
 echo "Deployment complete. All services are running in the background."

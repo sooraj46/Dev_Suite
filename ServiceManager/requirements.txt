@@ -1,0 +1,8 @@
+# Web client library for API interactions
+requests==2.32.3
+
+# RabbitMQ messaging library
+pika==1.3.2
+
+# Environment variable loader
+python-dotenv==1.0.1

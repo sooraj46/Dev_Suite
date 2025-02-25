@@ -14,11 +14,13 @@ echo "Undeploying Dev_Suite application services..."
 
 # Define the service script names that were started by deploy.sh.
 SERVICES=(
+    "servicemanager.py"
     "agentregistry.py"
     "fileserver.py"
     "gitservice.py"
     "developeragent.py"
     "manageragent.py"
+    "testagent.py"
     "frontend_app.py"
 )
 

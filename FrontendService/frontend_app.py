@@ -319,9 +319,52 @@ INDEX_HTML = """
               {% if projects %}
               <div class="list-group">
                 {% for p in projects %}
-                <a href="#" class="list-group-item list-group-item-action project-item" data-project-path="uploads/{{ p }}">
-                  <i class="fas fa-folder me-2 text-warning"></i>{{ p }}
-                </a>
+                <div class="list-group-item mb-2 border-left">
+                  <div class="d-flex justify-content-between align-items-center">
+                    <h6>
+                      <i class="fas fa-folder me-2 text-warning"></i>{{ p.name }}
+                      <span class="badge 
+                        {% if p.state == 'completed' %}bg-success
+                        {% elif p.state == 'testing' %}bg-warning
+                        {% elif p.state == 'development' %}bg-info
+                        {% elif p.state == 'assigned' %}bg-primary
+                        {% elif p.state == 'initialized' %}bg-secondary
+                        {% else %}bg-secondary{% endif %}">
+                        {{ p.state }}
+                      </span>
+                    </h6>
+                    <div class="dropdown">
+                      <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="projectMenu{{ loop.index }}" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fas fa-ellipsis-v"></i>
+                      </button>
+                      <ul class="dropdown-menu" aria-labelledby="projectMenu{{ loop.index }}">
+                        <li><a class="dropdown-item" href="/view_project_status?projectName={{ p.name }}&fileType=status">
+                          <i class="fas fa-file-alt me-2"></i>View Status</a></li>
+                        <li><a class="dropdown-item" href="/view_project_status?projectName={{ p.name }}&fileType=development">
+                          <i class="fas fa-code me-2"></i>View Dev Status</a></li>
+                        <li><a class="dropdown-item" href="/view_project_status?projectName={{ p.name }}&fileType=test">
+                          <i class="fas fa-vial me-2"></i>View Test Results</a></li>
+                        <li><a class="dropdown-item" href="/view_project_status?projectName={{ p.name }}&fileType=requirements">
+                          <i class="fas fa-clipboard-list me-2"></i>View Requirements</a></li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="small text-muted mt-2">
+                    {% if p.state == 'development' %}
+                    <i class="fas fa-code me-1"></i> In development
+                    {% elif p.state == 'testing' %}
+                    <i class="fas fa-vial me-1"></i> Testing in progress
+                    {% elif p.state == 'completed' %}
+                    <i class="fas fa-check-circle me-1"></i> Project completed
+                    {% elif p.state == 'initialized' %}
+                    <i class="fas fa-hourglass-start me-1"></i> Awaiting processing
+                    {% elif p.state == 'assigned' %}
+                    <i class="fas fa-tasks me-1"></i> Task assigned
+                    {% else %}
+                    <i class="fas fa-question-circle me-1"></i> Unknown status
+                    {% endif %}
+                  </div>
+                </div>
                 {% endfor %}
               </div>
               {% else %}
@@ -332,33 +375,113 @@ INDEX_HTML = """
         </div>
         
         <div class="col-md-7">
-          <!-- Form to view a project's status -->
+          <!-- Project details view -->
           <div class="card">
-            <div class="card-header">
-              <h5 class="mb-0"><i class="fas fa-file-alt me-2 text-success"></i>Project Status</h5>
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h5 class="mb-0">
+                <i class="fas fa-file-alt me-2 text-success"></i>
+                {% if current_project_name %}Project: {{ current_project_name }}{% else %}Project Details{% endif %}
+              </h5>
+              
+              {% if current_project_name %}
+              <div class="btn-group">
+                <a href="/view_project_status?projectName={{ current_project_name }}&fileType=status" class="btn btn-sm btn-outline-primary">Status</a>
+                <a href="/view_project_status?projectName={{ current_project_name }}&fileType=development" class="btn btn-sm btn-outline-info">Dev Info</a>
+                <a href="/view_project_status?projectName={{ current_project_name }}&fileType=test" class="btn btn-sm btn-outline-warning">Tests</a>
+                <a href="/view_project_status?projectName={{ current_project_name }}&fileType=requirements" class="btn btn-sm btn-outline-dark">Requirements</a>
+              </div>
+              {% endif %}
             </div>
             <div class="card-body">
-              <form method="GET" action="/view_project_status">
-                <div class="input-group mb-3">
-                  <span class="input-group-text">Path:</span>
+              {% if not current_project_name and not status_file_content %}
+                <p class="text-center text-muted py-4">
+                  <i class="fas fa-info-circle fa-2x mb-3"></i><br>
+                  Select a project from the list to view its details
+                </p>
+              {% else %}
+                {% if status_file_content %}
+                <div class="card">
+                  <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <div>
+                      {% if current_project_path and 'status.md' in current_project_path %}
+                        <i class="fas fa-file-alt me-1 text-primary"></i> Status File
+                      {% elif current_project_path and 'developmentstatus.md' in current_project_path %}
+                        <i class="fas fa-code me-1 text-info"></i> Development Log
+                      {% elif current_project_path and 'test_results.md' in current_project_path %}
+                        <i class="fas fa-vial me-1 text-warning"></i> Test Results
+                      {% elif current_project_path and 'requirements.md' in current_project_path %}
+                        <i class="fas fa-clipboard-list me-1 text-dark"></i> Requirements
+                      {% else %}
+                        <i class="fas fa-file me-1"></i> File Content
+                      {% endif %}
+                    </div>
+                    
+                    {% if current_project_path %}
+                    <span class="small text-muted">{{ current_project_path }}</span>
+                    {% endif %}
+                  </div>
+                  <div class="card-body">
+                    <pre class="p-3 bg-light rounded">{{ status_file_content }}</pre>
+                  </div>
+                </div>
+                {% endif %}
+                
+                {% if current_project_name %}
+                  {% set project_logs = [] %}
+                  {% for task in task_executions %}
+                    {% if task.project_name == current_project_name %}
+                      {% set _ = project_logs.append(task) %}
+                    {% endif %}
+                  {% endfor %}
+                  
+                  {% if project_logs %}
+                  <div class="card mt-3">
+                    <div class="card-header bg-light">
+                      <i class="fas fa-history me-1"></i> Project Activity ({{ project_logs|length }} events)
+                    </div>
+                    <div class="card-body p-0">
+                      <div class="list-group list-group-flush">
+                        {% for log in project_logs %}
+                        <div class="list-group-item py-2 px-3">
+                          <div class="d-flex justify-content-between align-items-center">
+                            <span class="badge 
+                              {% if 'TASK_EXECUTION' in log.type %}bg-primary
+                              {% elif 'CLARIFICATION' in log.type %}bg-warning
+                              {% elif 'PROGRESS_UPDATE' in log.type %}bg-info
+                              {% elif 'ERROR' in log.type %}bg-danger
+                              {% elif 'COMPLETE' in log.type %}bg-success
+                              {% else %}bg-secondary{% endif %} me-2">
+                              {{ log.type }}
+                            </span>
+                            <small class="text-muted">{{ log.timestamp }}</small>
+                          </div>
+                          <div class="small mt-1">
+                            {{ log.sender }} → {{ log.receiver }}
+                          </div>
+                          {% if log.payload.message %}
+                          <div class="mt-1 small">
+                            <i class="fas fa-comment-alt me-1"></i> {{ log.payload.message }}
+                          </div>
+                          {% endif %}
+                        </div>
+                        {% endfor %}
+                      </div>
+                    </div>
+                  </div>
+                  {% endif %}
+                {% endif %}
+              {% endif %}
+              
+              <form method="GET" action="/view_project_status" class="mt-3">
+                <div class="input-group">
+                  <span class="input-group-text">Custom Path:</span>
                   <input type="text" name="projectPath" id="projectPath" class="form-control" 
-                    placeholder="uploads/project_1234/status.md" />
-                  <button type="submit" class="btn btn-success">
+                    placeholder="uploads/project_1234/custom_file.md" />
+                  <button type="submit" class="btn btn-secondary">
                     <i class="fas fa-search me-1"></i> View
                   </button>
                 </div>
               </form>
-              
-              {% if status_file_content %}
-              <div class="card mt-3">
-                <div class="card-header bg-light">
-                  Status File Content
-                </div>
-                <div class="card-body">
-                  <pre>{{ status_file_content }}</pre>
-                </div>
-              </div>
-              {% endif %}
             </div>
           </div>
         </div>
@@ -371,11 +494,20 @@ INDEX_HTML = """
         <div class="card">
           <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0"><i class="fas fa-history me-2 text-primary"></i>Development Activity Log</h5>
-            <div class="btn-group">
-              <button class="btn btn-sm btn-outline-secondary filter-btn active" data-filter="all">All</button>
-              <button class="btn btn-sm btn-outline-secondary filter-btn" data-filter="NEW_REQUIREMENT">Requirements</button>
-              <button class="btn btn-sm btn-outline-secondary filter-btn" data-filter="TASK_EXECUTION">Tasks</button>
-              <button class="btn btn-sm btn-outline-secondary filter-btn" data-filter="CLARIFICATION">Clarifications</button>
+            <div class="d-flex gap-2">
+              <div class="btn-group me-2">
+                <button class="btn btn-sm btn-outline-secondary filter-btn active" data-filter="all">All</button>
+                <button class="btn btn-sm btn-outline-secondary filter-btn" data-filter="NEW_REQUIREMENT">Requirements</button>
+                <button class="btn btn-sm btn-outline-secondary filter-btn" data-filter="TASK_EXECUTION">Tasks</button>
+                <button class="btn btn-sm btn-outline-secondary filter-btn" data-filter="CLARIFICATION">Clarifications</button>
+              </div>
+              
+              <select id="projectFilter" class="form-select form-select-sm" style="max-width: 180px;">
+                <option value="all">All Projects</option>
+                {% for p in projects %}
+                <option value="{{ p.name }}">{{ p.name }}</option>
+                {% endfor %}
+              </select>
             </div>
           </div>
           <div class="card-body">
@@ -389,12 +521,13 @@ INDEX_HTML = """
               
               <div class="list-group">
                 {% for item in task_executions %}
-                <div class="list-group-item list-group-item-action task-item" data-type="{{ item.type }}">
+                <div class="list-group-item list-group-item-action task-item" data-type="{{ item.type }}" data-project="{{ item.project_name }}">
                   <div class="d-flex justify-content-between align-items-start">
                     <div>
                       <span class="badge 
                         {% if 'TASK_EXECUTION' in item.type %}bg-primary
                         {% elif 'CLARIFICATION' in item.type %}bg-warning
+                        {% elif 'PROGRESS_UPDATE' in item.type %}bg-info
                         {% elif 'ERROR' in item.type %}bg-danger
                         {% elif 'COMPLETE' in item.type %}bg-success
                         {% else %}bg-secondary{% endif %} me-2">
@@ -404,24 +537,56 @@ INDEX_HTML = """
                     </div>
                     
                     <div class="feedback-container">
+                      {% if 'TASK_EXECUTION' in item.type %}
                       <div class="feedback-stars" data-id="{{ item.message_id }}">
                         {% for i in range(5) %}
                         <i class="far fa-star" data-rating="{{ i+1 }}"></i>
                         {% endfor %}
                       </div>
+                      {% endif %}
                     </div>
                   </div>
                   
-                  <div class="mt-2">
-                    <span class="text-primary">{{ item.sender }}</span> → <span class="text-info">{{ item.receiver }}</span>
+                  <div class="mt-2 d-flex justify-content-between">
+                    <div>
+                      <span class="text-primary">{{ item.sender }}</span> → <span class="text-info">{{ item.receiver }}</span>
+                    </div>
+                    {% if item.project_name %}
+                    <span class="badge bg-light text-dark" data-project-name="{{ item.project_name }}">
+                      <i class="fas fa-folder-open me-1"></i>{{ item.project_name }}
+                    </span>
+                    {% endif %}
                   </div>
                   
+                  {% if 'PROGRESS_UPDATE' in item.type and item.get('progress') is not none %}
+                  <div class="mt-2">
+                    <div class="progress" style="height: 20px;">
+                      <div class="progress-bar progress-bar-striped 
+                        {% if item.payload.stage == 'error' or item.payload.stage == 'failed' %}bg-danger
+                        {% elif item.payload.stage == 'complete' %}bg-success
+                        {% elif item.payload.stage == 'testing' %}bg-warning
+                        {% else %}bg-info{% endif %}" 
+                        role="progressbar" 
+                        style="width: {{ (item.get('progress', 0) * 100)|int }}%;" 
+                        aria-valuenow="{{ (item.get('progress', 0) * 100)|int }}" 
+                        aria-valuemin="0" 
+                        aria-valuemax="100">
+                        {{ (item.get('progress', 0) * 100)|int }}%
+                      </div>
+                    </div>
+                    <div class="mt-1 small">
+                      <i class="fas fa-info-circle me-1"></i>
+                      <span class="fw-bold">{{ item.payload.stage|capitalize }}:</span> {{ item.payload.message }}
+                    </div>
+                  </div>
+                  {% else %}
                   <div class="mt-2">
                     <span class="badge bg-light text-dark me-2">Status: {{ item.status }}</span>
                     {% if item.reason != "N/A" %}
                     <span class="badge bg-light text-dark">Reason: {{ item.reason }}</span>
                     {% endif %}
                   </div>
+                  {% endif %}
                   
                   <a class="btn btn-sm btn-outline-secondary mt-2 toggle-payload" data-bs-toggle="collapse" 
                      href="#payload-{{ loop.index }}" role="button">
@@ -596,29 +761,114 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Filter buttons for activity log
   const filterButtons = document.querySelectorAll('.filter-btn');
+  const projectFilter = document.getElementById('projectFilter');
+  
+  // Function to apply both filters
+  function applyFilters() {
+    const typeFilter = document.querySelector('.filter-btn.active').getAttribute('data-filter');
+    const projectValue = projectFilter ? projectFilter.value : 'all';
+    
+    const taskItems = document.querySelectorAll('.task-item');
+    taskItems.forEach(item => {
+      // Type filter
+      let typeMatch = false;
+      if (typeFilter === 'all') {
+        typeMatch = true;
+      } else {
+        const itemType = item.getAttribute('data-type');
+        if (itemType && itemType.includes(typeFilter)) {
+          typeMatch = true;
+        }
+      }
+      
+      // Project filter
+      let projectMatch = false;
+      if (projectValue === 'all') {
+        projectMatch = true;
+      } else {
+        const projectName = item.getAttribute('data-project');
+        if (projectName && projectName === projectValue) {
+          projectMatch = true;
+        }
+      }
+      
+      // Apply both filters
+      if (typeMatch && projectMatch) {
+        item.style.display = 'block';
+      } else {
+        item.style.display = 'none';
+      }
+    });
+  }
+  
+  // Add data-project attributes to all task items
+  document.querySelectorAll('.task-item').forEach(item => {
+    let projectName = null;
+    const projectInfo = item.querySelector('[data-project-name]');
+    if (projectInfo) {
+      projectName = projectInfo.getAttribute('data-project-name');
+      item.setAttribute('data-project', projectName);
+    }
+  });
+  
+  // Listen for filter button clicks
   filterButtons.forEach(btn => {
     btn.addEventListener('click', function() {
       // Update active button
       filterButtons.forEach(b => b.classList.remove('active'));
       this.classList.add('active');
       
-      const filter = this.getAttribute('data-filter');
-      const taskItems = document.querySelectorAll('.task-item');
-      
-      taskItems.forEach(item => {
-        if (filter === 'all') {
-          item.style.display = 'block';
-        } else {
-          const itemType = item.getAttribute('data-type');
-          if (itemType.includes(filter)) {
-            item.style.display = 'block';
-          } else {
-            item.style.display = 'none';
-          }
-        }
-      });
+      // Apply both filters
+      applyFilters();
     });
   });
+  
+  // Listen for project filter changes
+  if (projectFilter) {
+    projectFilter.addEventListener('change', applyFilters);
+  }
+  
+  // Add filter for progress updates
+  const progressButton = document.createElement('button');
+  progressButton.className = 'btn btn-sm btn-outline-secondary filter-btn';
+  progressButton.setAttribute('data-filter', 'PROGRESS_UPDATE');
+  progressButton.textContent = 'Progress';
+  document.querySelector('.btn-group').appendChild(progressButton);
+  
+  // Setup live progress updates via polling
+  function updateProgressBars() {
+    const progressBars = document.querySelectorAll('.progress-bar');
+    
+    // Animate progress bars when they appear
+    progressBars.forEach(bar => {
+      if (!bar.classList.contains('progress-animated')) {
+        bar.classList.add('progress-animated');
+        const currentWidth = bar.style.width;
+        bar.style.width = '0%';
+        setTimeout(() => {
+          bar.style.transition = 'width 0.8s ease-in-out';
+          bar.style.width = currentWidth;
+        }, 100);
+      }
+    });
+  }
+  
+  // Call once on page load
+  updateProgressBars();
+  
+  // Call whenever auto-refresh happens
+  if (refreshToggle) {
+    refreshToggle.addEventListener('click', function() {
+      if (refreshInterval) {
+        // Set up a callback to refresh progress bars when page updates
+        const originalReload = window.location.reload;
+        window.location.reload = function() {
+          originalReload.apply(this, arguments);
+          setTimeout(updateProgressBars, 500);
+        };
+      }
+    });
+  }
   
   // Search in activity log
   const searchInput = document.getElementById('searchActivity');
@@ -653,13 +903,23 @@ document.addEventListener('DOMContentLoaded', function() {
         refreshStatus.textContent = 'Auto-refresh: OFF';
         refreshIndicator.style.display = 'none';
       } else {
-        // Turn on auto-refresh (every 10 seconds)
+        // Turn on auto-refresh (every 5 seconds for more responsive updates)
         refreshStatus.textContent = 'Auto-refresh: ON';
         refreshIndicator.style.display = 'inline-block';
+        
+        // Refresh immediately once
+        fetch(window.location.href)
+          .then(() => updateProgressBars());
+        
         refreshInterval = setInterval(function() {
-          // Reload the current page
-          window.location.reload();
-        }, 10000); // 10 seconds
+          // Check for updates without full page reload first
+          fetch(window.location.href)
+            .then(() => {
+              // Only reload full page if we've been idle for a while
+              window.location.reload();
+              setTimeout(updateProgressBars, 500);
+            });
+        }, 5000); // 5 seconds
       }
     });
   }
@@ -680,30 +940,90 @@ def index():
       - Logs of recent task executions
     """
     projects = []
+    project_statuses = {}
     try:
+        # Get list of projects
         list_url = f"{FILE_SERVER_BASE_URL}/list_directory"
-        resp = requests.get(list_url, timeout=5)
+        params = {"path": "uploads"}
+        resp = requests.get(list_url, params=params, timeout=5)
         resp.raise_for_status()
         data = resp.json()
-        projects = data.get("contents", [])
+        project_dirs = [item.replace("[DIR] ", "") for item in data.get("contents", []) if item.startswith("[DIR]")]
+        
+        # For each project, get the status info
+        for project_name in project_dirs:
+            status_path = f"uploads/{project_name}/status.md"
+            try:
+                status_url = f"{FILE_SERVER_BASE_URL}/read_file"
+                status_resp = requests.get(status_url, params={"path": status_path}, timeout=5)
+                if status_resp.status_code == 200:
+                    status_data = status_resp.json()
+                    status_content = status_data.get("content", "No status available")
+                    
+                    # Determine project state
+                    if "Project marked as completed" in status_content:
+                        state = "completed"
+                    elif "testing" in status_content.lower():
+                        state = "testing"
+                    elif "generating" in status_content.lower():
+                        state = "development"
+                    elif "Received TASK_ASSIGNMENT" in status_content:
+                        state = "assigned"
+                    elif "Project initialized" in status_content:
+                        state = "initialized"
+                    else:
+                        state = "unknown"
+                        
+                    # For display in the UI
+                    project_statuses[project_name] = {
+                        "status_content": status_content,
+                        "state": state
+                    }
+                else:
+                    project_statuses[project_name] = {
+                        "status_content": "Unable to fetch status",
+                        "state": "unknown"
+                    }
+            except Exception as e:
+                print(f"Error fetching status for project {project_name}: {e}")
+                project_statuses[project_name] = {
+                    "status_content": f"Error: {str(e)}",
+                    "state": "error"
+                }
+        
+        projects = [{"name": name, **status} for name, status in project_statuses.items()]
     except Exception as e:
-        print(f"Error listing default directory: {e}")
+        print(f"Error listing projects directory: {e}")
 
     # We'll pass the in-memory tasks log to the template
     # but transform it slightly to include a "type" and "timestamp" for readability.
     display_tasks = []
     for t in task_executions_log:
+        # Associate tasks with projects if possible
+        project_name = None
+        if "project_config" in t.get("payload", {}) and "project_name" in t.get("payload", {}).get("project_config", {}):
+            project_name = t.get("payload", {}).get("project_config", {}).get("project_name")
+        elif "project_name" in t.get("payload", {}):
+            project_name = t.get("payload", {}).get("project_name")
+            
         display_tasks.append({
             "type": t.get("type", ""),
             "timestamp": t.get("timestamp", ""),
-            "payload": t.get("payload", {})
+            "payload": t.get("payload", {}),
+            "progress": t.get("progress", 0.0),
+            "sender": t.get("sender", ""),
+            "receiver": t.get("receiver", ""),
+            "status": t.get("status", ""),
+            "reason": t.get("reason", "N/A"),
+            "project_name": project_name
         })
 
     return render_template_string(
         INDEX_HTML,
         projects=projects,
         clarification_request=pending_clarification,
-        task_executions=display_tasks
+        task_executions=display_tasks,
+        project_statuses=project_statuses
     )
 
 
@@ -788,45 +1108,36 @@ def submit_clarification_response():
 @app.route("/list_projects")
 def list_projects():
     """
-    Calls the file server /list_directory endpoint to list the base directory (uploads).
+    Calls the file server /list_directory endpoint to list the projects (uploads).
     Renders the same index template with an updated project list.
     """
-    projects = []
-    try:
-        list_url = f"{FILE_SERVER_BASE_URL}/list_directory"
-        resp = requests.get(list_url, timeout=5)
-        resp.raise_for_status()
-        data = resp.json()
-        projects = data.get("contents", [])
-    except Exception as e:
-        print(f"Error listing projects: {e}")
-
-    # Also include the current tasks log in the context
-    display_tasks = []
-    for t in task_executions_log:
-        display_tasks.append({
-            "type": t.get("type", ""),
-            "timestamp": t.get("timestamp", ""),
-            "payload": t.get("payload", {})
-        })
-
-    return render_template_string(
-        INDEX_HTML,
-        projects=projects,
-        clarification_request=pending_clarification,
-        task_executions=display_tasks
-    )
+    # Use the same logic as in the index route to get detailed project status
+    return index()
 
 
 @app.route("/view_project_status", methods=["GET"])
 def view_project_status():
     """
-    Reads a status file (e.g., status.md or developmentstatus.md) from the File Server.
-    The user provides 'projectPath' (e.g. 'uploads/xyz/status.md').
+    Reads a status file (e.g., status.md, developmentstatus.md, or test_results.md) from the File Server.
+    The user provides 'projectPath' (e.g. 'uploads/xyz/status.md') or 'projectName' and 'fileType'.
     """
     project_path = request.args.get("projectPath", "").strip()
+    project_name = request.args.get("projectName", "").strip()
+    file_type = request.args.get("fileType", "status").strip()
+    
+    # If project_name and file_type are provided, construct the path
+    if project_name and not project_path:
+        if file_type == "status":
+            project_path = f"uploads/{project_name}/status.md"
+        elif file_type == "development":
+            project_path = f"uploads/{project_name}/developmentstatus.md"
+        elif file_type == "test":
+            project_path = f"uploads/{project_name}/test_results.md"
+        elif file_type == "requirements":
+            project_path = f"uploads/{project_name}/requirements.md"
+    
     if not project_path:
-        return "Please provide a valid status file path!", 400
+        return "Please provide a valid status file path or project name and file type!", 400
 
     content = ""
     try:
@@ -836,34 +1147,21 @@ def view_project_status():
         data = resp.json()
         content = data.get("content", "")
     except Exception as e:
-        content = f"Error reading status file: {e}"
+        content = f"Error reading file: {e}"
 
-    # Re-fetch the uploads folder list for the sidebar
-    projects = []
-    try:
-        list_url = f"{FILE_SERVER_BASE_URL}/list_directory"
-        r2 = requests.get(list_url, timeout=5)
-        r2.raise_for_status()
-        d2 = r2.json()
-        projects = d2.get("contents", [])
-    except Exception:
-        pass
-
-    # Also include the current tasks log
-    display_tasks = []
-    for t in task_executions_log:
-        display_tasks.append({
-            "type": t.get("type", ""),
-            "timestamp": t.get("timestamp", ""),
-            "payload": t.get("payload", {})
-        })
-
+    # Call the index function to get the full context with projects and tasks
+    index_response = index()
+    
+    # Modify the response to include the status file content
+    context = index_response.__dict__["_get_current_object"].__self__.context
+    context['status_file_content'] = content
+    context['current_project_path'] = project_path
+    if project_name:
+        context['current_project_name'] = project_name
+    
     return render_template_string(
         INDEX_HTML,
-        projects=projects,
-        clarification_request=pending_clarification,
-        status_file_content=content,
-        task_executions=display_tasks
+        **context
     )
 
 
@@ -894,17 +1192,17 @@ def receive_clarification_request():
 @app.route("/receive_task_execution", methods=["POST"])
 def receive_task_execution():
     """
-    Allows the ManagerAgent to forward a TASK_EXECUTION (or other messages) to this frontend.
+    Allows the ManagerAgent to forward TASK_EXECUTION or PROGRESS_UPDATE messages to this frontend.
     We'll store it in 'task_executions_log' so it can be displayed in the UI.
-    Now includes feedback tracking.
+    Now includes progress tracking, live updates, and feedback system.
     """
     global task_executions_log
     try:
         data = request.get_json()
         # We store the entire message, but typically you'd store just essential fields
         # to avoid too large memory usage in production.
-        # We'll keep it minimal for demonstration.
-        # Ensure that 'type' and 'payload' are present, but not strictly enforced here.
+        
+        # Extract and store progress information for task tracking
         msg = {
             "message_id": data.get("message_id", str(time.time())),  
             "sender": data.get("sender", "Unknown"),
@@ -915,15 +1213,28 @@ def receive_task_execution():
             "status": data.get("status", "Pending"),  
             "reason": data.get("reason", "N/A"),
             "feedback": data.get("feedback", None),
-            "feedback_rating": data.get("feedback_rating", 0)
+            "feedback_rating": data.get("feedback_rating", 0),
+            "progress": data.get("progress", None)  # Store progress value if provided
         }
+        
+        # For progress updates, check if we need to update an existing entry
+        if data.get("type") == "PROGRESS_UPDATE" and data.get("payload", {}).get("project_name"):
+            project_name = data.get("payload", {}).get("project_name")
+            
+            # Find and update existing project's progress entries
+            for i, entry in enumerate(task_executions_log):
+                if (entry.get("type") == "PROGRESS_UPDATE" and 
+                    entry.get("payload", {}).get("project_name") == project_name):
+                    # Update the existing entry instead of creating a new one
+                    task_executions_log[i] = msg
+                    return jsonify({"status": "PROGRESS_UPDATE updated"}), 200
         
         # Limit log size to prevent memory issues (keep last 50 entries)
         if len(task_executions_log) >= 50:
             task_executions_log.pop()  # Remove oldest entry
             
         task_executions_log.insert(0, msg)  # Insert at front so newest appear first
-        return jsonify({"status": "TASK_EXECUTION received"}), 200
+        return jsonify({"status": f"{data.get('type', 'Message')} received"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
