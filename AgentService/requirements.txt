@@ -1,2 +1,4 @@
 pika
 requests
+docker
+docker-compose
